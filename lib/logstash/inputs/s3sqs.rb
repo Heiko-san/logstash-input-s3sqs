@@ -154,7 +154,7 @@ class LogStash::Inputs::S3SQS < LogStash::Inputs::Threadable
             end
             # process the plain text content
             begin
-              lines = body.read.split(/\n/)
+              lines = body.read.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: "\u2370").split(/\n/)
               lines.each do |line|
                 @codec.decode(line) do |event|
                   decorate(event)
