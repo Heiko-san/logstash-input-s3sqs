@@ -26,7 +26,7 @@ require "logstash/errors"
 # This plugin is meant for high availability setups, in contrast to logstash-input-s3 you can safely
 # use multiple logstash nodes, since the usage of sqs will ensure that each logfile is processed
 # only once and no file will get lost on node failure or downscaling for auto-scaling groups.
-# (You should use a "Message Retention Period" >= 4 days for your sqs to ensure you can survive 
+# (You should use a "Message Retention Period" >= 4 days for your sqs to ensure you can survive
 # a weekend of faulty log file processing)
 # The plugin will not delete objects from s3 buckets, so make sure to have a reasonable "Lifecycle"
 # configured for your buckets, which should keep the files at least "Message Retention Period" days.
@@ -37,7 +37,7 @@ require "logstash/errors"
 # (The plugin supports gzipped content if it is marked with "contend-encoding: gzip" as it is the
 # case for cloudtrail logs)
 #
-# The logstash node therefore must have sqs permissions + the permissions to download objects 
+# The logstash node therefore must have sqs permissions + the permissions to download objects
 # from the s3 buckets that send events to the queue.
 # (If logstash nodes are running on EC2 you should use a ServerRole to provide permissions)
 # [source,json]
@@ -107,20 +107,20 @@ class LogStash::Inputs::S3SQS < LogStash::Inputs::Threadable
   end
 
   def polling_options
-    { 
+    {
       # we will query 1 message at a time, so we can ensure correct error handling if we can't download a single file correctly
       # (we will throw :skip_delete if download size isn't correct to process the event again later
       # -> set a reasonable "Default Visibility Timeout" for your queue, so that there's enough time to process the log files)
-      :max_number_of_messages => 1, 
+      :max_number_of_messages => 1,
       # we will use the queue's setting, a good value is 10 seconds
       # (to ensure fast logstash shutdown on the one hand and few api calls on the other hand)
-      :wait_time_seconds => nil, 
+      :wait_time_seconds => nil,
     }
   end
 
   def handle_message(message, queue)
     hash = JSON.parse message.body
-    # there may be test events sent from the s3 bucket which won't contain a Records array, 
+    # there may be test events sent from the s3 bucket which won't contain a Records array,
     # we will skip those events and remove them from queue
     if hash['Records'] then
       # typically there will be only 1 record per event, but since it is an array we will
@@ -158,6 +158,10 @@ class LogStash::Inputs::S3SQS < LogStash::Inputs::Threadable
               lines.each do |line|
                 @codec.decode(line) do |event|
                   decorate(event)
+
+                  event['[@metadata][s3_bucket_name]'] = record['s3']['bucket']['name']
+                  event['[@metadata][s3_object_key]']  = record['s3']['object']['key']
+
                   queue << event
                 end
               end
@@ -208,7 +212,7 @@ class LogStash::Inputs::S3SQS < LogStash::Inputs::Threadable
     rescue Aws::SQS::Errors::ServiceError => e
       @logger.warn("Aws::SQS::Errors::ServiceError ... retrying SQS request with exponential backoff", :queue => @queue, :sleep_time => sleep_time, :error => e)
       sleep(next_sleep)
-      next_sleep =  next_sleep > max_time ? sleep_time : sleep_time * BACKOFF_FACTOR 
+      next_sleep =  next_sleep > max_time ? sleep_time : sleep_time * BACKOFF_FACTOR
       retry
     end
   end
