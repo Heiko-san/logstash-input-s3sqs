@@ -143,7 +143,7 @@ class LogStash::Inputs::S3SQS < LogStash::Inputs::Threadable
           if response.content_length == record['s3']['object']['size'] then
             body = response.body
             # if necessary unzip
-            if response.content_encoding == "gzip" then
+            if response.content_encoding == "gzip" or record['s3']['object']['key'].end_with?(".gz") then
               begin
 		            temp = Zlib::GzipReader.new(body)
               rescue => e

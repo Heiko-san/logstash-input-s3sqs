@@ -2,7 +2,8 @@ The following is a list of people who have contributed ideas, code, bug
 reports, or in general have helped logstash along its way.
 
 Contributors:
-* Heiko Finzel (Heiko-san)
+* joshuaspence (event metadata)
+* Heiko-san (initial contributor)
 * logstash-input-sqs plugin as code base
 
 Note: If you've sent us patches, bug reports, or otherwise contributed to
