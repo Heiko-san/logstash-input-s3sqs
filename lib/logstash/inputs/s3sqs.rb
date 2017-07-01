@@ -159,8 +159,8 @@ class LogStash::Inputs::S3SQS < LogStash::Inputs::Threadable
                 @codec.decode(line) do |event|
                   decorate(event)
 
-                  event['[@metadata][s3_bucket_name]'] = record['s3']['bucket']['name']
-                  event['[@metadata][s3_object_key]']  = record['s3']['object']['key']
+                  event.set('[@metadata][s3_bucket_name]', record['s3']['bucket']['name'])
+                  event.set('[@metadata][s3_object_key]', record['s3']['object']['key'])
 
                   queue << event
                 end
