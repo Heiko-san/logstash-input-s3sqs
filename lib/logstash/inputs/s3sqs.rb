@@ -5,6 +5,9 @@ require "logstash/namespace"
 require "logstash/timestamp"
 require "logstash/plugin_mixins/aws_config"
 require "logstash/errors"
+require 'logstash/inputs/s3sqs/patch'
+
+Aws.eager_autoload!
 
 # Get logs from AWS s3 buckets as issued by an object-created event via sqs.
 #
@@ -61,7 +64,8 @@ require "logstash/errors"
 #               "Effect": "Allow",
 #               "Action": [
 #                   "s3:Get*",
-#                   "s3:List*"
+#                   "s3:List*",
+#                   "s3:DeleteObject"
 #               ],
 #               "Resource": [
 #                   "arn:aws:s3:::my-elb-logs",
@@ -86,6 +90,9 @@ class LogStash::Inputs::S3SQS < LogStash::Inputs::Threadable
 
   # Name of the SQS Queue to pull messages from. Note that this is just the name of the queue, not the URL or ARN.
   config :queue, :validate => :string, :required => true
+
+  # Whether to delete files from S3 after processing.
+  config :delete_on_success, :validate => :boolean, :default => false
 
   attr_reader :poller
   attr_reader :s3
@@ -129,16 +136,20 @@ class LogStash::Inputs::S3SQS < LogStash::Inputs::Threadable
         # in case there are any events with Records that aren't s3 object-created events and can't therefore be
         # processed by this plugin, we will skip them and remove them from queue
         if record['eventSource'] == EVENT_SOURCE and record['eventName'].start_with?(EVENT_TYPE) then
+          bucket = record['s3']['bucket']['name']
+          key    = record['s3']['object']['key']
+
           # try download and :skip_delete if it fails
           begin
             response = @s3.get_object(
-              bucket: record['s3']['bucket']['name'],
-              key: record['s3']['object']['key']
+              bucket: bucket,
+              key: key,
             )
           rescue => e
-            @logger.warn("issuing :skip_delete on failed download", :bucket => record['s3']['bucket']['name'], :object => record['s3']['object']['key'], :error => e)
+            @logger.warn("issuing :skip_delete on failed download", :bucket => bucket, :object => key, :error => e)
             throw :skip_delete
           end
+
           # verify downloaded content size
           if response.content_length == record['s3']['object']['size'] then
             body = response.body
@@ -147,7 +158,7 @@ class LogStash::Inputs::S3SQS < LogStash::Inputs::Threadable
               begin
 		            temp = Zlib::GzipReader.new(body)
               rescue => e
-                @logger.warn("content is marked to be gzipped but can't unzip it, assuming plain text", :bucket => record['s3']['bucket']['name'], :object => record['s3']['object']['key'], :error => e)
+                @logger.warn("content is marked to be gzipped but can't unzip it, assuming plain text", :bucket => bucket, :object => key, :error => e)
                 temp = body
               end
               body = temp
@@ -166,12 +177,19 @@ class LogStash::Inputs::S3SQS < LogStash::Inputs::Threadable
                 end
               end
             rescue => e
-              @logger.warn("issuing :skip_delete on failed plain text processing", :bucket => record['s3']['bucket']['name'], :object => record['s3']['object']['key'], :error => e)
+              @logger.warn("issuing :skip_delete on failed plain text processing", :bucket => bucket, :object => key, :error => e)
               throw :skip_delete
+            end
+
+            # Delete the files from S3
+            begin
+              @s3.delete_object(bucket: bucket, key: key) if @delete_on_success
+            rescue => e
+              @logger.warn("Failed to delete S3 object", :bucket => bucket, :object => key, :error => e)
             end
           # otherwise try again later
           else
-            @logger.warn("issuing :skip_delete on wrong download content size", :bucket => record['s3']['bucket']['name'], :object => record['s3']['object']['key'],
+            @logger.warn("issuing :skip_delete on wrong download content size", :bucket => bucket, :object => key,
               :download_size => response.content_length, :expected => record['s3']['object']['size'])
             throw :skip_delete
           end
