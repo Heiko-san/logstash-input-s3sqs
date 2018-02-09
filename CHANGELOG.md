@@ -1,3 +1,7 @@
+## 1.1.1
+- Added the ability to remove objects from S3 after processing.
+- Workaround an issue with the Ruby autoload that causes "uninitialized constant `Aws::Client::Errors`" errors.
+
 ## 1.1.0
 - Logstash 5 compatibility
 
