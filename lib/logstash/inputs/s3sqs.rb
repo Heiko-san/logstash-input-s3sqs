@@ -5,6 +5,7 @@ require "logstash/namespace"
 require "logstash/timestamp"
 require "logstash/plugin_mixins/aws_config"
 require "logstash/errors"
+require "cgi/util"
 require "multiple_files_gzip_reader"
 
 # Get logs from AWS s3 buckets as issued by an object-created event via sqs.
@@ -134,7 +135,7 @@ class LogStash::Inputs::S3SQS < LogStash::Inputs::Threadable
           begin
             response = @s3.get_object(
               bucket: record['s3']['bucket']['name'],
-              key: record['s3']['object']['key']
+              key: CGI.unescape(record['s3']['object']['key'])
             )
           rescue => e
             @logger.warn("issuing :skip_delete on failed download", :bucket => record['s3']['bucket']['name'], :object => record['s3']['object']['key'], :error => e)
